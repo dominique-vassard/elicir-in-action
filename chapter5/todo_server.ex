@@ -52,9 +52,12 @@ defmodule TodoServer do
   import TodoList
 
   def start do
-    spawn(fn ->
-      loop(TodoList.new())
-    end)
+    todo_server =
+      spawn(fn ->
+        loop(TodoList.new())
+      end)
+
+    Process.register(todo_server, :todo_server)
   end
 
   def loop(todo_list) do
@@ -68,12 +71,12 @@ defmodule TodoServer do
   end
 
   # Interface
-  def add_entry(server_pid, entry) do
-    send(server_pid, {:add_entry, entry})
+  def add_entry(entry) do
+    send(:todo_server, {:add_entry, entry})
   end
 
-  def entries(server_pid, date) do
-    send(server_pid, {:entries, self(), date})
+  def entries(date) do
+    send(:todo_server, {:entries, self(), date})
 
     receive do
       {:todo_entries, entries} -> entries
@@ -82,8 +85,8 @@ defmodule TodoServer do
     end
   end
 
-  def all_entries(todo_server) do
-    send(todo_server, {:all_entries, self()})
+  def all_entries() do
+    send(:todo_server, {:all_entries, self()})
 
     receive do
       {:todo_all_entries, entries} -> entries
@@ -92,16 +95,16 @@ defmodule TodoServer do
     end
   end
 
-  def update_entry(todo_server, %{} = new_entry) do
-    send(todo_server, {:update_entry, new_entry})
+  def update_entry(%{} = new_entry) do
+    send(:todo_server, {:update_entry, new_entry})
   end
 
-  def update_entry(todo_server, entry_id, updater_fun) do
-    send(todo_server, {:update_entry, entry_id, updater_fun})
+  def update_entry(entry_id, updater_fun) do
+    send(:todo_server, {:update_entry, entry_id, updater_fun})
   end
 
-  def delete_entry(todo_server, entry_id) do
-    send(todo_server, {:delete_entry, entry_id})
+  def delete_entry(entry_id) do
+    send(:todo_server, {:delete_entry, entry_id})
   end
 
   # Internals
@@ -133,6 +136,9 @@ defmodule TodoServer do
 end
 
 # TESTING
+#
+# wITHOUT REGISTRY
+#
 # c("chapter5/todo_server.ex")
 # todo_server = TodoServer.start
 # TodoServer.add_entry(todo_server, %{date: ~D[2021-01-05], title: "first"})
@@ -147,3 +153,20 @@ end
 # TodoServer.delete_entry(todo_server, 1)
 # TodoServer.entries(todo_server, ~D[2021-05-25])
 # TodoServer.all_entries(todo_server)
+#
+# wITH REGISTRY
+
+# c("chapter5/todo_server.ex")
+# TodoServer.start()
+# TodoServer.add_entry(%{date: ~D[2021-01-05], title: "first"})
+# TodoServer.add_entry(%{date: ~D[2021-05-25], title: "again"})
+# TodoServer.add_entry(%{date: ~D[2021-01-05], title: "New one"})
+# TodoServer.entries(~D[2021-01-05])
+# TodoServer.update_entry(%{id: 1, date: ~D[2021-05-25], title: "Very first"})
+# TodoServer.entries(~D[2021-01-05])
+# TodoServer.entries(~D[2021-05-25])
+# TodoServer.update_entry(1, fn %{} = e -> %{e | title: "5"} end)
+# TodoServer.entries(~D[2021-05-25])
+# TodoServer.delete_entry(1)
+# TodoServer.entries(~D[2021-05-25])
+# TodoServer.all_entries()
