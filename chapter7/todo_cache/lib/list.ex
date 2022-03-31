@@ -16,10 +16,18 @@ defmodule Todo.List do
     %Todo.List{todo_list | entries: new_entries, auto_id: todo_list.auto_id + 1}
   end
 
+  def entries(nil, _) do
+    nil
+  end
+
   def entries(todo_list, date) do
     todo_list.entries
     |> Stream.filter(fn {_, entry} -> entry.date == date end)
     |> Enum.map(fn {_, entry} -> entry end)
+  end
+
+  def all_entries(nil) do
+    nil
   end
 
   def all_entries(todo_list) do

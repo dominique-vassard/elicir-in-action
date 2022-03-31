@@ -1,4 +1,5 @@
 defmodule Todo.Database do
+  alias Todo.RoundRobin
   use GenServer
 
   @db_folder "./persist"
@@ -10,7 +11,15 @@ defmodule Todo.Database do
   @impl true
   def init(_) do
     File.mkdir_p!(@db_folder)
-    {:ok, nil}
+
+    worker_list =
+      Enum.map(1..3, fn index ->
+        worker_name = :"worker#{index}"
+        Todo.DatabaseWorker.start(@db_folder, worker_name)
+        worker_name
+      end)
+
+    {:ok, {RoundRobin.from_list(worker_list), %{}}}
   end
 
   def store(key, data) do
@@ -27,47 +36,45 @@ defmodule Todo.Database do
 
   @impl true
   def handle_cast({:store, key, data}, state) do
-    spawn(fn ->
+    {worker, worker_list, registry} =
       key
-      |> filename()
-      |> File.write!(:erlang.term_to_binary(data))
-    end)
+      |> worker(state)
 
-    {:noreply, state}
+    Todo.DatabaseWorker.store(worker, key, data)
+
+    {:noreply, {worker_list, registry}}
   end
 
   @impl true
   def handle_cast({:delete, key}, state) do
-    spawn(fn ->
+    {worker, worker_list, registry} =
       key
-      |> filename()
-      |> File.rm!()
-    end)
+      |> worker(state)
 
-    {:noreply, state}
+    Todo.DatabaseWorker.delete(worker, key)
+
+    {:noreply, {worker_list, registry}}
   end
 
   @impl true
-  def handle_call({:get, key}, caller, state) do
-    spawn(fn ->
-      fetched_data =
-        key
-        |> filename()
-        |> File.read()
+  def handle_call({:get, key}, _, state) do
+    {worker, worker_list, registry} =
+      key
+      |> worker(state)
 
-      data =
-        case fetched_data do
-          {:ok, new_data} -> :erlang.binary_to_term(new_data)
-          {:error, _} -> nil
-        end
+    IO.inspect(worker)
 
-      GenServer.reply(caller, data)
-    end)
-
-    {:noreply, state}
+    {:reply, Todo.DatabaseWorker.get(worker, key), {worker_list, registry}}
   end
 
-  defp filename(key) do
-    Path.join(@db_folder, to_string(key))
+  defp worker(key, {worker_list, registry}) do
+    case Map.fetch(registry, key) do
+      {:ok, worker} ->
+        {worker, worker_list, registry}
+
+      :error ->
+        {RoundRobin.current(worker_list), RoundRobin.next(worker_list),
+         Map.put(registry, key, RoundRobin.current(worker_list))}
+    end
   end
 end
