@@ -10,3 +10,10 @@ defmodule Todo.System do
     Supervisor.init([Todo.Cache], strategy: :one_for_one)
   end
 end
+
+# TESTING
+# {:ok, cache} = Todo.Cache.start()
+# bob = Todo.Cache.server_process(cache, "bob's one")
+# Todo.Server.all_entries(bob)
+# nl = Todo.Cache.server_process(cache, "new list")
+# Todo.Server.all_entries(nl)
